@@ -6,8 +6,13 @@
 
 #install dependency with 'sudo easy_install apscheduler' NOT with 'sudo pip install apscheduler'
 import os, sys, Adafruit_DHT, time
+import RPi.GPIO as GPIO
 from datetime import datetime, date
 from apscheduler.schedulers.background import BackgroundScheduler
+
+GPIO.setmode(GPIO.BOARD)
+
+GPIO.setup(5, GPIO.OUT)
 
 sensor                       = Adafruit_DHT.AM2302 #DHT11/DHT22/AM2302
 pin                          = 2
@@ -22,6 +27,7 @@ csv_entry_format             = "{:%Y-%m-%d %H:%M:%S},{:0.1f}\n"
 sec_between_log_entries      = 60
 latest_humidity              = 0.0
 latest_temperature           = 0.0
+ventilation_temp_max         = 25.0
 latest_value_datetime        = None
 
 def write_header(file_handle, csv_header):
@@ -48,6 +54,12 @@ def write_latest_value():
     write_value(f_latest_value, latest_value_datetime, latest_temperature)
   with open_file_ensure_header(latest_humidity_file_path, 'w', csv_header_humidity) as f_latest_value:  #open and truncate
     write_value(f_latest_value, latest_value_datetime, latest_humidity)
+    
+def switch_fan():
+    if latest_temperature >= ventilation_temp_max:
+        GPIO.output(5, GPIO.HIGH)
+    if latest_temperature <= ventilation_temp_max:
+        GPIO.output(5, GPIO.LOW)
 
 f_hist_temp = open_file_ensure_header(hist_temperature_file_path, 'a', csv_header_temperature)
 f_hist_hum  = open_file_ensure_header(hist_humidity_file_path, 'a', csv_header_humidity)
@@ -70,7 +82,9 @@ try:
       latest_humidity, latest_temperature = hum, temp
       latest_value_datetime = datetime.today()
       write_latest_value()
+      switch_fan()
     time.sleep(1)
 except (KeyboardInterrupt, SystemExit):
   scheduler.shutdown()
+  GPIO.output(5, GPIO.LOW)
 
